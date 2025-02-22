@@ -113,7 +113,7 @@ services:
     networks:
       - data_pipeline_network
 
-  # Airflow
+  # Airflow (Webserver + Scheduler)
   airflow:
     image: apache/airflow:2.7.1
     container_name: airflow
