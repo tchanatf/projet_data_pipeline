@@ -1,0 +1,12 @@
+FROM cassandra:4.1
+
+# Installer nano (optionnel) et modifier cassandra.yaml
+RUN apt-get update && apt-get install -y nano && \
+    sed -i 's/^listen_address:.*/listen_address: 172.18.0.5/' /etc/cassandra/cassandra.yaml && \
+    sed -i 's/^seeds:.*/seeds: \"172.18.0.5\"/' /etc/cassandra/cassandra.yaml && \
+    sed -i 's/^rpc_address:.*/rpc_address: 0.0.0.0/' /etc/cassandra/cassandra.yaml && \
+    echo "broadcast_address: 172.18.0.5" >> /etc/cassandra/cassandra.yaml && \
+    echo "broadcast_rpc_address: 172.18.0.5" >> /etc/cassandra/cassandra.yaml
+
+# Commande pour démarrer Cassandra normalement
+CMD ["cassandra", "-R", "-f"]

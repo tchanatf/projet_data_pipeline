@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # Zookeeper pour Kafka
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.3.0
+    image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -15,12 +13,15 @@ services:
 
   # Kafka Broker
   kafka:
-    image: confluentinc/cp-kafka:7.3.0
+    image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
     depends_on:
       - zookeeper
     ports:
+      - "9092:9092"
       - "29092:29092"
+    volumes:
+      - ./scripts:/app/scripts
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -46,98 +47,183 @@ services:
     networks:
       - data_pipeline_network
 
-  # PostgreSQL
+  # PostgreSQL (Pour Airflow)
   postgres:
     image: postgres:15
     container_name: postgres
     environment:
-      POSTGRES_DB: ${DB_NAME:-mydatabase}
-      POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password123}
+      POSTGRES_DB: airflow_db  # Base de données pour Airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - data_pipeline_network
-
-  # pgAdmin
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
     networks:
       - data_pipeline_network
 
   # Apache Spark Master
   spark-master:
-    image: bitnami/spark:3.5
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    image: custom-spark:3.5
     container_name: spark-master
     environment:
       - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - JAVA_HOME=/opt/bitnami/java
+      - SPARK_CLASSPATH=/opt/bitnami/spark/jars/*
     ports:
-      - "8081:8080"  # Spark Web UI
-      - "7077:7077"  # Spark Master port
+      - "8081:8080"  
+      - "7078:7077" 
     volumes:
-      - ./mnt/data:/mnt/data
+      - ./scripts:/app/scripts
     networks:
       - data_pipeline_network
 
   # Apache Spark Worker
   spark-worker:
-    image: bitnami/spark:3.5
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    image: custom-spark:3.5
     container_name: spark-worker
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_CLASSPATH=/opt/bitnami/spark/jars/*
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=4
+      - JAVA_HOME=/opt/bitnami/java
     volumes:
-      - ./mnt/data:/mnt/data
+      - ./scripts:/app/scripts
+      - ./scripts:/app/scripts
     depends_on:
       - spark-master
     networks:
       - data_pipeline_network
 
-  # Airflow (Webserver + Scheduler)
-  airflow:
-    image: apache/airflow:2.7.1
-    container_name: airflow
+  # # Cassandra
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    ports:
+      - "9042:9042"
+    networks:
+      data_pipeline_network:
+        ipv4_address: 172.18.0.5  # IP statique pour Cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=MyCluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_LISTEN_ADDRESS=172.18.0.5
+      - CASSANDRA_SEEDS=172.18.0.5
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+      - ./cassandra.yaml:/etc/cassandra/cassandra.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["bash", "-c", "exec cassandra -R -f"]
+
+  # Airflow Initialization (Run once)
+  airflow-init:
+    build:
+      context: . 
+      dockerfile: Dockerfile.airflow
+    image: airflow-custom:latest  
+    container_name: airflow-init
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${DB_USER:-admin}:${DB_PASSWORD:-password123}@postgres/${DB_NAME:-mydatabase}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow_db
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
-      - AIRFLOW__WEBSERVER__SECRET_KEY=your_secret_key
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./scripts:/app/scripts
-    ports:
-      - "8082:8080"  # Airflow UI
-    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com && airflow webserver"
+    command: >
+      bash -c "airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true"
     networks:
       - data_pipeline_network
 
+  # Airflow Webserver
+  airflow-webserver:
+    image: airflow-custom:latest
+    container_name: airflow-webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow_db
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_secret_key
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/app/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8082:8080"  
+    command: airflow webserver
+    networks:
+      - data_pipeline_network     
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    image: airflow-custom:latest
+    container_name: airflow-scheduler
+    depends_on:
+      airflow-webserver:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow_db
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/app/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: airflow scheduler
+    networks:
+      - data_pipeline_network
+
+  # Redis
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - data_pipeline_network
+    restart: always
+
 networks:
   data_pipeline_network:
+    name: data_pipeline_network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16  # Définition du sous-réseau
 
 volumes:
   postgres_data:
+  cassandra_data:

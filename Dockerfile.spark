@@ -1,0 +1,19 @@
+FROM bitnami/spark:3.5.0
+
+# Installer les dépendances système
+USER root
+
+# Installer curl et autres utilitaires
+RUN apt-get update && apt-get install -y curl python3-pip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Installer le connecteur Cassandra pour Spark
+RUN pip install cassandra-driver
+
+# # Copier les fichiers JAR nécessaires
+# COPY jars/*.jar /opt/bitnami/spark/jars/
+
+# # Donner les bonnes permissions aux fichiers et répertoires dans /opt/bitnami/spark/jars/
+# RUN chown -R root: /opt/bitnami/spark/jars && chmod -R 644 /opt/bitnami/spark/jars/*.jar
+
+USER 1001

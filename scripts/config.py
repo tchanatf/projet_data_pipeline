@@ -1,0 +1,13 @@
+REDIS_HOST = "redis"
+
+KAFKA_HOST = "kafka"
+POSTGRES_HOST = "postgres"
+SPARK_MASTER = "spark://spark-master:7077"
+
+POSTGRES_PORT = "5432"
+
+KAFKA_BROKER = "kafka:9092"
+
+CASSANDRA_HOST = "172.18.0.5"
+CASSANDRA_PORT = "9042"
+CASSANDRA_KEYSPACE = "mykeyspace"
