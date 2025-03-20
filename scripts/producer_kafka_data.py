@@ -37,9 +37,13 @@ producer = Producer(producer_config)
 #---------------- FONCTION DE NORMALISATION DES CHAMPS ---------------------------------------
 
 def normalize_column_name(col_name):
-    col_name = unidecode.unidecode(col_name)  # Supprimer accents
-    col_name = re.sub(r"[^\w\s]", "", col_name)  # Supprimer caractères spéciaux (parenthèses, etc.)
-    col_name = re.sub(r"\s+", "_", col_name)  # Remplacer espaces par underscores
+    # Supprimer accents
+    col_name = unidecode.unidecode(col_name)
+    # Supprimer caractères spéciaux (parenthèses, etc.)
+    col_name = re.sub(r"[^\w\s]", "", col_name) 
+    # Remplacer espaces par underscores
+    col_name = re.sub(r"\s+", "_", col_name) 
+    # Rendre toutes les lettres en minuscules
     col_name = col_name.lower()
 
     return col_name

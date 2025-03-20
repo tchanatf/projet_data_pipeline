@@ -16,10 +16,4 @@ docker exec -it $SPARK_CONTAINER /opt/bitnami/spark/bin/spark-submit \
   --conf spark.driver.memory=$SPARK_DRIVER_MEMORY \
   --conf spark.logLevel=DEBUG \
   $CONSUMER_SCRIPT
-
-# Vérification que le consumer a été lancé
-if [ $? -eq 0 ]; then
-  echo "Consumer Spark lancé avec succès."
-else
-  echo "Erreur lors du lancement du consumer Spark."
-fi
+  

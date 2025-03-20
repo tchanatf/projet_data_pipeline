@@ -1,13 +1,9 @@
 flask==2.2.5
 unidecode
 
-# kafka-python==2.0.2                 
-# confluent-kafka==2.3.0
-
 apache-airflow
 apache-airflow-providers-apache-spark
 apache-airflow-providers-apache-kafka
 
-# Dependencies for Cassandra
 # Pour interagir avec Cassandra depuis Python
 cassandra-driver==3.28.0

@@ -71,7 +71,7 @@ services:
   spark-master:
     build:
       context: .
-      dockerfile: Dockerfile.spark
+      dockerfile: dockerfiles/Dockerfile.spark
     image: custom-spark:3.5
     container_name: spark-master
     environment:
@@ -80,7 +80,7 @@ services:
       - SPARK_CLASSPATH=/opt/bitnami/spark/jars/*
     ports:
       - "8081:8080"  
-      - "7078:7077" 
+      - "7077:7077" 
     volumes:
       - ./scripts:/app/scripts
     networks:
@@ -90,7 +90,7 @@ services:
   spark-worker:
     build:
       context: .
-      dockerfile: Dockerfile.spark
+      dockerfile: dockerfiles/Dockerfile.spark
     image: custom-spark:3.5
     container_name: spark-worker
     environment:
@@ -125,7 +125,7 @@ services:
       - CASSANDRA_SEEDS=172.18.0.5
     volumes:
       - cassandra_data:/var/lib/cassandra
-      - ./cassandra.yaml:/etc/cassandra/cassandra.yaml
+      - ./dockerfiles/cassandra.yaml:/etc/cassandra/cassandra.yaml
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces'"]
       interval: 10s
@@ -137,7 +137,7 @@ services:
   airflow-init:
     build:
       context: . 
-      dockerfile: Dockerfile.airflow
+      dockerfile: dockerfiles/Dockerfile.airflow
     image: airflow-custom:latest  
     container_name: airflow-init
     depends_on:
